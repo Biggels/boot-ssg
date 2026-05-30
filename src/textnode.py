@@ -1,17 +1,23 @@
-from enum import StrEnum, auto
+from enum import Enum
+
+from htmlnode import LeafNode
 
 
-class TextType(StrEnum):
-    PLAIN = auto()
-    BOLD = auto()
-    ITALIC = auto()
-    CODE = auto()
-    LINK = auto()
-    IMAGE = auto()
+class TextType(Enum):
+    PLAIN = "plain"
+    BOLD = "bold"
+    ITALIC = "italic"
+    CODE = "code"
+    LINK = "link"
+    IMAGE = "image"
 
 
 class TextNode:
-    def __init__(self, text, text_type, url=None):
+    def __init__(self, text: str, text_type: TextType, url: str | None = None):
+        if not isinstance(text_type, TextType):
+            raise TypeError(
+                f"text_type must be a TextType, got {type(text_type).__name__}"
+            )
         self.text = text
         self.text_type = text_type
         self.url = url
@@ -25,3 +31,30 @@ class TextNode:
 
     def __repr__(self):
         return f"TextNode({self.text}, {self.text_type.value}, {self.url})"
+
+
+def text_node_to_html_node(text_node: TextNode) -> LeafNode:
+    match text_node.text_type:
+        case TextType.PLAIN:
+            return LeafNode(tag=None, value=text_node.text)
+        case TextType.BOLD:
+            return LeafNode(tag="b", value=text_node.text)
+        case TextType.ITALIC:
+            return LeafNode(tag="i", value=text_node.text)
+        case TextType.CODE:
+            return LeafNode(tag="code", value=text_node.text)
+        case TextType.LINK:
+            return LeafNode(
+                tag="a", value=text_node.text, props={"href": "https://www.google.com"}
+            )
+        case TextType.IMAGE:
+            return LeafNode(
+                tag="img",
+                value="",
+                props={
+                    "src": text_node.url,
+                    "alt": text_node.text,
+                },
+            )
+        case _:
+            raise ValueError(f"Invalid text type: {text_node.text_type}")
