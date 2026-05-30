@@ -14,7 +14,7 @@ class TestTextType(unittest.TestCase):
 class TestTextNode(unittest.TestCase):
     def test_str_text_type_rejected(self):
         with self.assertRaises(TypeError) as cm:
-            TextNode("This is a text node", "bold")
+            TextNode("This is a text node", "bold")  # pyright: ignore[reportArgumentType]
         self.assertIn("must be a TextType", str(cm.exception))
 
     def test_textnode_text_type_accepted(self):
