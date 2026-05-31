@@ -1,7 +1,7 @@
 import unittest
 
 from htmlnode import LeafNode
-from node_wrangling import text_node_to_html_node
+from node_wrangling import split_nodes_delimiter, text_node_to_html_node
 from textnode import TextNode, TextType
 
 
@@ -66,4 +66,149 @@ class TestNodeConversion(unittest.TestCase):
                 "src": "htts://www.coolimages.com/really-cool-image",
                 "alt": "This is a really cool image",
             },
+        )
+
+
+class TestSplitNodes(unittest.TestCase):
+    def test_split_no_delims(self):
+        node = TextNode("This is text with no inline markdown", TextType.PLAIN)
+        new_nodes = split_nodes_delimiter([node], "**", TextType.BOLD)
+        self.assertEqual(
+            new_nodes,
+            [
+                TextNode("This is text with no inline markdown", TextType.PLAIN),
+            ],
+        )
+
+    def test_split_wrong_delim(self):
+        node = TextNode(
+            "This is text with a **bolded phrase** in the middle", TextType.PLAIN
+        )
+        new_nodes = split_nodes_delimiter([node], "_", TextType.ITALIC)
+        self.assertEqual(
+            new_nodes,
+            [
+                TextNode(
+                    "This is text with a **bolded phrase** in the middle",
+                    TextType.PLAIN,
+                )
+            ],
+        )
+
+    def test_split_no_closing_delim(self):
+        node = TextNode(
+            "This is text with a **bolded phrase in the middle", TextType.PLAIN
+        )
+
+        with self.assertRaises(ValueError):
+            split_nodes_delimiter([node], "**", TextType.BOLD)
+
+    def test_split_non_plain(self):
+        node = TextNode("this is bold text", TextType.BOLD)
+        new_nodes = split_nodes_delimiter([node], "**", TextType.BOLD)
+        self.assertEqual(new_nodes, [TextNode("this is bold text", TextType.BOLD)])
+
+    def test_split_single_bold(self):
+        node = TextNode(
+            "This is text with a **bolded phrase** in the middle", TextType.PLAIN
+        )
+        new_nodes = split_nodes_delimiter([node], "**", TextType.BOLD)
+        self.assertEqual(
+            new_nodes,
+            [
+                TextNode("This is text with a ", TextType.PLAIN),
+                TextNode("bolded phrase", TextType.BOLD),
+                TextNode(" in the middle", TextType.PLAIN),
+            ],
+        )
+
+    def test_split_single_italic(self):
+        node = TextNode(
+            "This is text with an _italic phrase_ in the middle", TextType.PLAIN
+        )
+        new_nodes = split_nodes_delimiter([node], "_", TextType.ITALIC)
+        self.assertEqual(
+            new_nodes,
+            [
+                TextNode("This is text with an ", TextType.PLAIN),
+                TextNode("italic phrase", TextType.ITALIC),
+                TextNode(" in the middle", TextType.PLAIN),
+            ],
+        )
+
+    def test_split_single_code(self):
+        node = TextNode(
+            "This is text with a `code block` in the middle", TextType.PLAIN
+        )
+        new_nodes = split_nodes_delimiter([node], "`", TextType.CODE)
+        self.assertEqual(
+            new_nodes,
+            [
+                TextNode("This is text with a ", TextType.PLAIN),
+                TextNode("code block", TextType.CODE),
+                TextNode(" in the middle", TextType.PLAIN),
+            ],
+        )
+
+    def test_split_multiple_bold(self):
+        node = TextNode(
+            "This is text with a **bolded phrase** and **another bolded phrase** and **another bolded phrase** in the middle",
+            TextType.PLAIN,
+        )
+        new_nodes = split_nodes_delimiter([node], "**", TextType.BOLD)
+        self.assertEqual(
+            new_nodes,
+            [
+                TextNode("This is text with a ", TextType.PLAIN),
+                TextNode("bolded phrase", TextType.BOLD),
+                TextNode(" and ", TextType.PLAIN),
+                TextNode("another bolded phrase", TextType.BOLD),
+                TextNode(" and ", TextType.PLAIN),
+                TextNode("another bolded phrase", TextType.BOLD),
+                TextNode(" in the middle", TextType.PLAIN),
+            ],
+        )
+
+    def test_split_multiple_diff(self):
+        node = TextNode(
+            "This is text with a **bolded phrase** and an _italic phrase_ and a `code block` in the middle",
+            TextType.PLAIN,
+        )
+        new_nodes = split_nodes_delimiter([node], "**", TextType.BOLD)
+        self.assertEqual(
+            new_nodes,
+            [
+                TextNode("This is text with a ", TextType.PLAIN),
+                TextNode("bolded phrase", TextType.BOLD),
+                TextNode(
+                    " and an _italic phrase_ and a `code block` in the middle",
+                    TextType.PLAIN,
+                ),
+            ],
+        )
+
+    def test_split_multiple_nodes(self):
+        old_nodes = [
+            TextNode(
+                "This is text with a **bolded phrase** in the middle", TextType.PLAIN
+            ),
+            TextNode(
+                "This is text with an _italic phrase_ in the middle", TextType.PLAIN
+            ),
+            TextNode("This is text with a `code block` in the middle", TextType.PLAIN),
+        ]
+        new_nodes = split_nodes_delimiter(old_nodes, "**", TextType.BOLD)
+        self.assertEqual(
+            new_nodes,
+            [
+                TextNode("This is text with a ", TextType.PLAIN),
+                TextNode("bolded phrase", TextType.BOLD),
+                TextNode(" in the middle", TextType.PLAIN),
+                TextNode(
+                    "This is text with an _italic phrase_ in the middle", TextType.PLAIN
+                ),
+                TextNode(
+                    "This is text with a `code block` in the middle", TextType.PLAIN
+                ),
+            ],
         )
