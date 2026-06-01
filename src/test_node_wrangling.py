@@ -70,9 +70,6 @@ class TestNodeConversion(unittest.TestCase):
 
 
 class TestSplitNodes(unittest.TestCase):
-    # test delim at beginning and end
-    # test empty list
-
     def test_split_empty_list(self):
         new_nodes = split_nodes_delimiter([], "**", TextType.BOLD)
         self.assertEqual(new_nodes, [])
