@@ -1,3 +1,5 @@
+import re
+
 from htmlnode import LeafNode
 from textnode import TextNode, TextType
 
@@ -53,3 +55,21 @@ def split_nodes_delimiter(
                 else:
                     new_nodes.append(TextNode(chunk, text_type))
     return new_nodes
+
+
+def extract_markdown_images(text: str | None) -> list[tuple]:
+    # md img format is ![alt text](url)
+    # !\[(.*?)\]\((.*?)\) was rejected because it breaks with nested brackets/parens
+    if not text:
+        return []
+    matches = re.findall(pattern=r"!\[([^\[\]]*)\]\(([^\(\)]*)\)", string=text)
+    return matches
+
+
+def extract_markdown_links(text: str | None) -> list[tuple]:
+    # md link format is [display text](url)
+    # (?<!!)\[(.*?)\]\((.*?)\) was rejected because it breaks with nested brackets/parens
+    if not text:
+        return []
+    matches = re.findall(pattern=r"(?<!!)\[([^\[\]]*)\]\(([^\(\)]*)\)", string=text)
+    return matches
