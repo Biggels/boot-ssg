@@ -38,9 +38,16 @@ def split_nodes_delimiter(
             new_nodes.append(node)
         else:
             chunks = node.text.split(delimiter)
+            # if it split into an even number of chunks, that means there was an odd number of delims
+            # which means a mismatched opener/closer
             if len(chunks) % 2 == 0:
                 raise ValueError("One of old_nodes contains invalid Markdown syntax")
             for i, chunk in enumerate(chunks):
+                # if it starts or ends with a delim, split makes empty strings, which we don't need to pass through
+                # we still want to iterate over them to preserve the even-odd ordering
+                if chunk == "":
+                    continue
+                # the chunks will always start with a plain one, then alternate, so evens are plain
                 if i % 2 == 0:
                     new_nodes.append(TextNode(chunk, TextType.PLAIN))
                 else:

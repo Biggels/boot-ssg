@@ -70,6 +70,13 @@ class TestNodeConversion(unittest.TestCase):
 
 
 class TestSplitNodes(unittest.TestCase):
+    # test delim at beginning and end
+    # test empty list
+
+    def test_split_empty_list(self):
+        new_nodes = split_nodes_delimiter([], "**", TextType.BOLD)
+        self.assertEqual(new_nodes, [])
+
     def test_split_no_delims(self):
         node = TextNode("This is text with no inline markdown", TextType.PLAIN)
         new_nodes = split_nodes_delimiter([node], "**", TextType.BOLD)
@@ -119,6 +126,28 @@ class TestSplitNodes(unittest.TestCase):
                 TextNode("This is text with a ", TextType.PLAIN),
                 TextNode("bolded phrase", TextType.BOLD),
                 TextNode(" in the middle", TextType.PLAIN),
+            ],
+        )
+
+    def test_split_single_bold_start(self):
+        node = TextNode("**Bold text** starts this one", TextType.PLAIN)
+        new_nodes = split_nodes_delimiter([node], "**", TextType.BOLD)
+        self.assertEqual(
+            new_nodes,
+            [
+                TextNode("Bold text", TextType.BOLD),
+                TextNode(" starts this one", TextType.PLAIN),
+            ],
+        )
+
+    def test_split_single_bold_end(self):
+        node = TextNode("This one ends with **bold text**", TextType.PLAIN)
+        new_nodes = split_nodes_delimiter([node], "**", TextType.BOLD)
+        self.assertEqual(
+            new_nodes,
+            [
+                TextNode("This one ends with ", TextType.PLAIN),
+                TextNode("bold text", TextType.BOLD),
             ],
         )
 
