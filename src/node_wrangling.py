@@ -73,3 +73,49 @@ def extract_markdown_links(text: str | None) -> list[tuple]:
         return []
     matches = re.findall(pattern=r"(?<!!)\[([^\[\]]*)\]\(([^\(\)]*)\)", string=text)
     return matches
+
+
+def split_nodes_image(old_nodes: list[TextNode]) -> list[TextNode]:
+    new_nodes = []
+    for node in old_nodes:
+        if node.text_type is not TextType.PLAIN:
+            new_nodes.append(node)
+        else:
+            text = node.text
+            matches = extract_markdown_images(text)
+            for alt_text, src_url in matches:
+                if src_url == "":
+                    continue
+                matched_text = f"![{alt_text}]({src_url})"
+                pre, text = text.split(matched_text, maxsplit=1)
+                if pre != "":
+                    new_nodes.append(TextNode(pre, TextType.PLAIN))
+                new_nodes.append(TextNode(alt_text, TextType.IMAGE, src_url))
+            if text != "":
+                new_nodes.append(TextNode(text, TextType.PLAIN))
+
+    return new_nodes
+
+
+def split_nodes_link(old_nodes: list[TextNode]) -> list[TextNode]:
+    new_nodes = []
+    for node in old_nodes:
+        if node.text_type is not TextType.PLAIN:
+            new_nodes.append(node)
+        else:
+            text = node.text
+            matches = extract_markdown_links(text)
+            for display_text, href_url in matches:
+                if href_url == "":
+                    continue
+                matched_text = f"[{display_text}]({href_url})"
+                pre, text = text.split(matched_text, maxsplit=1)
+                if pre != "":
+                    new_nodes.append(TextNode(pre, TextType.PLAIN))
+                if display_text == "":
+                    display_text = href_url
+                new_nodes.append(TextNode(display_text, TextType.LINK, href_url))
+            if text != "":
+                new_nodes.append(TextNode(text, TextType.PLAIN))
+
+    return new_nodes

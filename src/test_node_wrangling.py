@@ -5,6 +5,8 @@ from node_wrangling import (
     extract_markdown_images,
     extract_markdown_links,
     split_nodes_delimiter,
+    split_nodes_image,
+    split_nodes_link,
     text_node_to_html_node,
 )
 from textnode import TextNode, TextType
@@ -436,4 +438,323 @@ class TestStrictBracketAndParenRule(unittest.TestCase):
         self.assertEqual(
             extract_markdown_links("![a cool image[](i.imgur.com/abcd)"),
             [("", "i.imgur.com/abcd")],
+        )
+
+
+class TestSplitNodesImage(unittest.TestCase):
+    def test_empty_list_returns_empty_list(self):
+        self.assertEqual(split_nodes_image([]), [])
+
+    def test_single_image_in_middle_splits_into_three_nodes(self):
+        node = TextNode("see ![a cat](a.png) here", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_image([node]),
+            [
+                TextNode("see ", TextType.PLAIN),
+                TextNode("a cat", TextType.IMAGE, "a.png"),
+                TextNode(" here", TextType.PLAIN),
+            ],
+        )
+
+    def test_multiple_images_all_converted(self):
+        node = TextNode("![a](1.png) and ![b](2.png)", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_image([node]),
+            [
+                TextNode("a", TextType.IMAGE, "1.png"),
+                TextNode(" and ", TextType.PLAIN),
+                TextNode("b", TextType.IMAGE, "2.png"),
+            ],
+        )
+
+    def test_image_at_start_has_no_leading_empty_node(self):
+        node = TextNode("![first](a.png) then text", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_image([node]),
+            [
+                TextNode("first", TextType.IMAGE, "a.png"),
+                TextNode(" then text", TextType.PLAIN),
+            ],
+        )
+
+    def test_image_at_end_has_no_trailing_empty_node(self):
+        node = TextNode("text then ![last](z.png)", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_image([node]),
+            [
+                TextNode("text then ", TextType.PLAIN),
+                TextNode("last", TextType.IMAGE, "z.png"),
+            ],
+        )
+
+    def test_node_that_is_entirely_one_image_yields_only_that_node(self):
+        # Nothing surrounds the image, so there should be no empty PLAIN nodes
+        # on either side -- just the single IMAGE node.
+        node = TextNode("![solo](a.png)", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_image([node]),
+            [TextNode("solo", TextType.IMAGE, "a.png")],
+        )
+
+    def test_plain_node_with_no_markdown_passes_through_unchanged(self):
+        node = TextNode("just some plain prose", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_image([node]),
+            [TextNode("just some plain prose", TextType.PLAIN)],
+        )
+
+    def test_multiple_input_nodes_flattened_in_order(self):
+        nodes = [
+            TextNode("text with ![a](1.png) image", TextType.PLAIN),
+            TextNode("more ![b](2.png) here", TextType.PLAIN),
+        ]
+        self.assertEqual(
+            split_nodes_image(nodes),
+            [
+                TextNode("text with ", TextType.PLAIN),
+                TextNode("a", TextType.IMAGE, "1.png"),
+                TextNode(" image", TextType.PLAIN),
+                TextNode("more ", TextType.PLAIN),
+                TextNode("b", TextType.IMAGE, "2.png"),
+                TextNode(" here", TextType.PLAIN),
+            ],
+        )
+
+    def test_non_plain_node_passed_through_unchanged(self):
+        # A node that is already a non-PLAIN type (e.g. from an earlier pass in
+        # the chain) is not re-parsed; it is appended as-is.
+        node = TextNode("already bold", TextType.BOLD)
+        self.assertEqual(
+            split_nodes_image([node]),
+            [TextNode("already bold", TextType.BOLD)],
+        )
+
+    def test_malformed_image_left_as_plain_text(self):
+        node = TextNode("this has a broken ![image](url and stuff", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_image([node]),
+            [TextNode("this has a broken ![image](url and stuff", TextType.PLAIN)],
+        )
+
+    def test_nested_image_converts_only_inner_image(self):
+        # Only the well-formed inner image is converted; the broken outer
+        # wrapper is left behind as literal PLAIN text.
+        node = TextNode(
+            "![a cool picture![my best friend](i.imgur.com/abcd)](i.imgur.com/efgh)",
+            TextType.PLAIN,
+        )
+        self.assertEqual(
+            split_nodes_image([node]),
+            [
+                TextNode("![a cool picture", TextType.PLAIN),
+                TextNode("my best friend", TextType.IMAGE, "i.imgur.com/abcd"),
+                TextNode("](i.imgur.com/efgh)", TextType.PLAIN),
+            ],
+        )
+
+    def test_image_with_empty_url_left_as_plain_text(self):
+        # An image with no url is not converted -- fail soft and leave the
+        # literal markdown in place rather than producing a urlless IMAGE node.
+        node = TextNode("see ![alt]() here", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_image([node]),
+            [TextNode("see ![alt]() here", TextType.PLAIN)],
+        )
+
+    def test_image_with_empty_alt_uses_empty_string_alt(self):
+        # Missing alt text is fine: the image still renders, alt="" is valid.
+        node = TextNode("see ![](a.png) here", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_image([node]),
+            [
+                TextNode("see ", TextType.PLAIN),
+                TextNode("", TextType.IMAGE, "a.png"),
+                TextNode(" here", TextType.PLAIN),
+            ],
+        )
+
+    def test_duplicate_identical_images_both_converted(self):
+        node = TextNode("![cat](a.png) and again ![cat](a.png)", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_image([node]),
+            [
+                TextNode("cat", TextType.IMAGE, "a.png"),
+                TextNode(" and again ", TextType.PLAIN),
+                TextNode("cat", TextType.IMAGE, "a.png"),
+            ],
+        )
+
+    def test_image_splitter_ignores_links(self):
+        # The image splitter must leave link syntax untouched in the PLAIN text.
+        node = TextNode("![img](a.png) and [link](b.com)", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_image([node]),
+            [
+                TextNode("img", TextType.IMAGE, "a.png"),
+                TextNode(" and [link](b.com)", TextType.PLAIN),
+            ],
+        )
+
+
+class TestSplitNodesLink(unittest.TestCase):
+    def test_empty_list_returns_empty_list(self):
+        self.assertEqual(split_nodes_link([]), [])
+
+    def test_single_link_in_middle_splits_into_three_nodes(self):
+        node = TextNode("see [a site](a.com) here", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_link([node]),
+            [
+                TextNode("see ", TextType.PLAIN),
+                TextNode("a site", TextType.LINK, "a.com"),
+                TextNode(" here", TextType.PLAIN),
+            ],
+        )
+
+    def test_multiple_links_all_converted(self):
+        node = TextNode(
+            "This is text with a link [to boot dev](https://www.boot.dev) and [to youtube](https://www.youtube.com/@bootdotdev)",
+            TextType.PLAIN,
+        )
+        self.assertEqual(
+            split_nodes_link([node]),
+            [
+                TextNode("This is text with a link ", TextType.PLAIN),
+                TextNode("to boot dev", TextType.LINK, "https://www.boot.dev"),
+                TextNode(" and ", TextType.PLAIN),
+                TextNode(
+                    "to youtube", TextType.LINK, "https://www.youtube.com/@bootdotdev"
+                ),
+            ],
+        )
+
+    def test_link_at_start_has_no_leading_empty_node(self):
+        node = TextNode("[first](a.com) then text", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_link([node]),
+            [
+                TextNode("first", TextType.LINK, "a.com"),
+                TextNode(" then text", TextType.PLAIN),
+            ],
+        )
+
+    def test_link_at_end_has_no_trailing_empty_node(self):
+        node = TextNode("text then [last](z.com)", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_link([node]),
+            [
+                TextNode("text then ", TextType.PLAIN),
+                TextNode("last", TextType.LINK, "z.com"),
+            ],
+        )
+
+    def test_node_that_is_entirely_one_link_yields_only_that_node(self):
+        # Nothing surrounds the link, so there should be no empty PLAIN nodes
+        # on either side -- just the single LINK node.
+        node = TextNode("[solo](a.com)", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_link([node]),
+            [TextNode("solo", TextType.LINK, "a.com")],
+        )
+
+    def test_plain_node_with_no_markdown_passes_through_unchanged(self):
+        node = TextNode("just some plain prose", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_link([node]),
+            [TextNode("just some plain prose", TextType.PLAIN)],
+        )
+
+    def test_multiple_input_nodes_flattened_in_order(self):
+        nodes = [
+            TextNode("text with [a](1.com) link", TextType.PLAIN),
+            TextNode("more [b](2.com) here", TextType.PLAIN),
+        ]
+        self.assertEqual(
+            split_nodes_link(nodes),
+            [
+                TextNode("text with ", TextType.PLAIN),
+                TextNode("a", TextType.LINK, "1.com"),
+                TextNode(" link", TextType.PLAIN),
+                TextNode("more ", TextType.PLAIN),
+                TextNode("b", TextType.LINK, "2.com"),
+                TextNode(" here", TextType.PLAIN),
+            ],
+        )
+
+    def test_non_plain_node_passed_through_unchanged(self):
+        # A node that is already a non-PLAIN type (e.g. from an earlier pass in
+        # the chain) is not re-parsed; it is appended as-is.
+        node = TextNode("already bold", TextType.BOLD)
+        self.assertEqual(
+            split_nodes_link([node]),
+            [TextNode("already bold", TextType.BOLD)],
+        )
+
+    def test_malformed_link_left_as_plain_text(self):
+        node = TextNode("this has a broken [link](url and stuff", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_link([node]),
+            [TextNode("this has a broken [link](url and stuff", TextType.PLAIN)],
+        )
+
+    def test_nested_link_converts_only_inner_link(self):
+        # Only the well-formed inner link is converted; the broken outer
+        # wrapper is left behind as literal PLAIN text.
+        node = TextNode(
+            "[ok](a.com) and [outer[inner](u1)](u2)",
+            TextType.PLAIN,
+        )
+        self.assertEqual(
+            split_nodes_link([node]),
+            [
+                TextNode("ok", TextType.LINK, "a.com"),
+                TextNode(" and [outer", TextType.PLAIN),
+                TextNode("inner", TextType.LINK, "u1"),
+                TextNode("](u2)", TextType.PLAIN),
+            ],
+        )
+
+    def test_link_with_empty_url_left_as_plain_text(self):
+        # A link with no url is not converted -- fail soft and leave the literal
+        # markdown in place rather than producing a urlless LINK node.
+        node = TextNode("see [text]() here", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_link([node]),
+            [TextNode("see [text]() here", TextType.PLAIN)],
+        )
+
+    def test_link_with_empty_text_falls_back_to_url(self):
+        # An empty <a> is invisible/unclickable, so we use the url as the
+        # visible link text to keep the link usable.
+        node = TextNode("see [](b.com) here", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_link([node]),
+            [
+                TextNode("see ", TextType.PLAIN),
+                TextNode("b.com", TextType.LINK, "b.com"),
+                TextNode(" here", TextType.PLAIN),
+            ],
+        )
+
+    def test_duplicate_identical_links_both_converted(self):
+        node = TextNode("[cat](a.com) and again [cat](a.com)", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_link([node]),
+            [
+                TextNode("cat", TextType.LINK, "a.com"),
+                TextNode(" and again ", TextType.PLAIN),
+                TextNode("cat", TextType.LINK, "a.com"),
+            ],
+        )
+
+    def test_link_splitter_ignores_images(self):
+        # The link splitter must not be fooled by the [..](..) shape inside an
+        # image; only the real link is converted.
+        node = TextNode("![img](a.png) and [link](b.com)", TextType.PLAIN)
+        self.assertEqual(
+            split_nodes_link([node]),
+            [
+                TextNode("![img](a.png) and ", TextType.PLAIN),
+                TextNode("link", TextType.LINK, "b.com"),
+            ],
         )
