@@ -47,7 +47,7 @@ class TestNodeConversion(unittest.TestCase):
         node = TextNode(
             text="This is a link text node",
             text_type=TextType.LINK,
-            url="htts://www.google.com",
+            url="https://www.google.com",
         )
         html_node = text_node_to_html_node(node)
         self.assertIsInstance(html_node, LeafNode)
