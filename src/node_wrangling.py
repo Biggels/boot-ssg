@@ -86,6 +86,8 @@ def split_nodes_image(old_nodes: list[TextNode]) -> list[TextNode]:
             for alt_text, src_url in matches:
                 if src_url == "":
                     continue
+                # matched_text is guaranteed present right now because it's rebuilt from the extractor
+                # but if the extractor pattern changes in the future this could break
                 matched_text = f"![{alt_text}]({src_url})"
                 pre, text = text.split(matched_text, maxsplit=1)
                 if pre != "":
@@ -108,6 +110,8 @@ def split_nodes_link(old_nodes: list[TextNode]) -> list[TextNode]:
             for display_text, href_url in matches:
                 if href_url == "":
                     continue
+                # matched_text is guaranteed present right now because it's rebuilt from the extractor
+                # but if the extractor pattern changes in the future this could break
                 matched_text = f"[{display_text}]({href_url})"
                 pre, text = text.split(matched_text, maxsplit=1)
                 if pre != "":
