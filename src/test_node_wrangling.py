@@ -8,6 +8,7 @@ from node_wrangling import (
     split_nodes_image,
     split_nodes_link,
     text_node_to_html_node,
+    text_to_textnodes,
 )
 from textnode import TextNode, TextType
 
@@ -756,5 +757,61 @@ class TestSplitNodesLink(unittest.TestCase):
             [
                 TextNode("![img](a.png) and ", TextType.PLAIN),
                 TextNode("link", TextType.LINK, "b.com"),
+            ],
+        )
+
+
+class TestTextToTextnodes(unittest.TestCase):
+    def test_converts_all_inline_types_in_one_string(self):
+        # The end-to-end happy path: one of every inline type in a single
+        # string, proving the whole pipeline is wired and ordered correctly.
+        text = "This is **text** with an _italic_ word and a `code block` and an ![obi wan image](https://i.imgur.com/fJRm4Vk.jpeg) and a [link](https://boot.dev)"
+        self.assertEqual(
+            text_to_textnodes(text),
+            [
+                TextNode("This is ", TextType.PLAIN),
+                TextNode("text", TextType.BOLD),
+                TextNode(" with an ", TextType.PLAIN),
+                TextNode("italic", TextType.ITALIC),
+                TextNode(" word and a ", TextType.PLAIN),
+                TextNode("code block", TextType.CODE),
+                TextNode(" and an ", TextType.PLAIN),
+                TextNode(
+                    "obi wan image",
+                    TextType.IMAGE,
+                    "https://i.imgur.com/fJRm4Vk.jpeg",
+                ),
+                TextNode(" and a ", TextType.PLAIN),
+                TextNode("link", TextType.LINK, "https://boot.dev"),
+            ],
+        )
+
+    def test_empty_string_returns_empty_list(self):
+        # Empty in, empty out -- the splitters drop empty strings rather than
+        # emit a blank PLAIN node.
+        self.assertEqual(text_to_textnodes(""), [])
+
+    def test_plain_text_with_no_markdown_returns_single_plain_node(self):
+        self.assertEqual(
+            text_to_textnodes("just plain text, nothing special"),
+            [TextNode("just plain text, nothing special", TextType.PLAIN)],
+        )
+
+    def test_unbalanced_delimiter_raises_value_error(self):
+        # An unbalanced delimiter propagates the ValueError from
+        # split_nodes_delimiter -- we deliberately let it crash.
+        with self.assertRaises(ValueError):
+            text_to_textnodes("this is **broken bold with no closer")
+
+    def test_delimiter_char_in_link_url_is_preserved(self):
+        # The ordering test: images/links must be split BEFORE delimiters, so
+        # the underscores inside this url are never treated as italic markers.
+        text = "see [my docs](https://example.com/a_b_c) here"
+        self.assertEqual(
+            text_to_textnodes(text),
+            [
+                TextNode("see ", TextType.PLAIN),
+                TextNode("my docs", TextType.LINK, "https://example.com/a_b_c"),
+                TextNode(" here", TextType.PLAIN),
             ],
         )
