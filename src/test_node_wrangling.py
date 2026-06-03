@@ -4,6 +4,7 @@ from htmlnode import LeafNode
 from node_wrangling import (
     extract_markdown_images,
     extract_markdown_links,
+    markdown_to_blocks,
     split_nodes_delimiter,
     split_nodes_image,
     split_nodes_link,
@@ -814,4 +815,75 @@ class TestTextToTextnodes(unittest.TestCase):
                 TextNode("my docs", TextType.LINK, "https://example.com/a_b_c"),
                 TextNode(" here", TextType.PLAIN),
             ],
+        )
+
+
+class TestMarkdownToBlocks(unittest.TestCase):
+    def test_separates_all_block_types_on_blank_lines(self):
+        # markdown_to_blocks is type-agnostic: it only splits on blank lines,
+        # so every supported block type should flow through untouched.
+        md = """
+# This is a heading
+
+This is a paragraph with **bold** text and `code` here
+This is the same paragraph on a new line
+
+```
+code block line
+```
+
+> this is a quote
+
+- list item one
+- list item two
+
+1. first item
+2. second item
+"""
+        blocks = markdown_to_blocks(md)
+        self.assertEqual(
+            blocks,
+            [
+                "# This is a heading",
+                "This is a paragraph with **bold** text and `code` here\nThis is the same paragraph on a new line",
+                "```\ncode block line\n```",
+                "> this is a quote",
+                "- list item one\n- list item two",
+                "1. first item\n2. second item",
+            ],
+        )
+
+    def test_empty_string_returns_empty_list(self):
+        self.assertEqual(markdown_to_blocks(""), [])
+
+    def test_whitespace_only_input_returns_empty_list(self):
+        # Blocks that strip down to nothing are dropped, so an all-whitespace
+        # document yields no blocks at all.
+        self.assertEqual(markdown_to_blocks("\n\n   \n\n"), [])
+
+    def test_single_block_returns_single_element_list(self):
+        self.assertEqual(
+            markdown_to_blocks("just one paragraph"),
+            ["just one paragraph"],
+        )
+
+    def test_excessive_newlines_between_blocks_dropped(self):
+        # More than one blank line between blocks must not produce empty blocks.
+        self.assertEqual(
+            markdown_to_blocks("block one\n\n\n\nblock two"),
+            ["block one", "block two"],
+        )
+
+    def test_leading_and_trailing_blank_lines_dropped(self):
+        self.assertEqual(
+            markdown_to_blocks("\n\nonly block\n\n"),
+            ["only block"],
+        )
+
+    def test_interior_indentation_is_preserved(self):
+        # Only the outer edges of a block are stripped; indentation on inner
+        # lines survives so code blocks and lists display correctly.
+        self.assertEqual(
+            markdown_to_blocks("first line\n    indented second line"),
+            ["first line\n    indented second line"],
         )
