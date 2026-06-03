@@ -1,0 +1,33 @@
+[
+  {
+    "label": "Debug: current test file (unittest)",
+    "adapter": "Debugpy",
+    "request": "launch",
+    "module": "unittest",
+    "args": ["$ZED_STEM"],
+    "cwd": "$ZED_WORKTREE_ROOT/src"
+  },
+  {
+    "label": "Debug: TestMarkdownToBlocks",
+    "adapter": "Debugpy",
+    "request": "launch",
+    "module": "unittest",
+    "args": ["test_node_wrangling.TestMarkdownToBlocks"],
+    "cwd": "$ZED_WORKTREE_ROOT/src"
+  },
+  {
+    "label": "Debug: all tests (discover)",
+    "adapter": "Debugpy",
+    "request": "launch",
+    "module": "unittest",
+    "args": ["discover"],
+    "cwd": "$ZED_WORKTREE_ROOT/src"
+  },
+  {
+    "label": "Debug: main.py",
+    "adapter": "Debugpy",
+    "request": "launch",
+    "program": "$ZED_WORKTREE_ROOT/src/main.py",
+    "cwd": "$ZED_WORKTREE_ROOT/src"
+  }
+]
