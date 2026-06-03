@@ -1,7 +1,8 @@
 import unittest
 
 from htmlnode import LeafNode
-from node_wrangling import (
+from textnode import TextNode, TextType
+from transformations import (
     extract_markdown_images,
     extract_markdown_links,
     markdown_to_blocks,
@@ -11,7 +12,6 @@ from node_wrangling import (
     text_node_to_html_node,
     text_to_textnodes,
 )
-from textnode import TextNode, TextType
 
 
 class TestNodeConversion(unittest.TestCase):
