@@ -1,5 +1,6 @@
 import re
 
+from blocktype import BlockType
 from htmlnode import LeafNode
 from textnode import TextNode, TextType
 
@@ -138,3 +139,40 @@ def markdown_to_blocks(markdown: str) -> list[str]:
     blocks = [block.strip() for block in markdown.split("\n\n")]
     blocks = [block for block in blocks if block]
     return blocks
+
+
+def block_to_block_type(block: str) -> BlockType:
+    # empty strings should be paragraphs
+    # if we don't guard here, the all() on quote will match the empty
+    if not block:
+        return BlockType.PARAGRAPH
+
+    # HEADING
+    # the negated set could also just be ., because . doesn't include newline by default
+    # but the negated set is more explicit
+    if re.match(r"^#{1,6} [^\n]+$", block):
+        return BlockType.HEADING
+
+    # CODE
+    if re.match(
+        r"^```\n.*```$", block, re.DOTALL
+    ):  # the DOTALL flag makes . include newline
+        return BlockType.CODE
+
+    # QUOTE
+    if all(line.startswith(">") for line in block.splitlines()):
+        return BlockType.QUOTE
+
+    # UNORDERED_LIST
+    if all(line.startswith("- ") for line in block.splitlines()):
+        return BlockType.UNORDERED_LIST
+
+    # ORDERED_LIST
+    # rewrite with enumerate and all()
+    if all(
+        line.startswith(f"{count}. ")
+        for count, line in enumerate(block.splitlines(), start=1)
+    ):
+        return BlockType.ORDERED_LIST
+
+    return BlockType.PARAGRAPH

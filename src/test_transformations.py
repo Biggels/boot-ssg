@@ -1,8 +1,10 @@
 import unittest
 
+from blocktype import BlockType
 from htmlnode import LeafNode
 from textnode import TextNode, TextType
 from transformations import (
+    block_to_block_type,
     extract_markdown_images,
     extract_markdown_links,
     markdown_to_blocks,
@@ -887,3 +889,190 @@ code block line
             markdown_to_blocks("first line\n    indented second line"),
             ["first line\n    indented second line"],
         )
+
+
+class TestBlockToBlockType(unittest.TestCase):
+    # The function receives a single, already-stripped block of markdown and
+    # returns the BlockType it matches. No nested markdown is supported, and an
+    # empty string never reaches here in practice (markdown_to_blocks filters
+    # it) but is still classified for safety. The classifier never raises: any
+    # block matching none of the rules is a PARAGRAPH.
+
+    # --- Heading ---------------------------------------------------------
+
+    def test_heading_one_hash_returns_heading(self):
+        self.assertEqual(block_to_block_type("# Heading"), BlockType.HEADING)
+
+    def test_heading_six_hashes_returns_heading(self):
+        self.assertEqual(block_to_block_type("###### Heading"), BlockType.HEADING)
+
+    def test_heading_seven_hashes_returns_paragraph(self):
+        # Only 1-6 # are valid; one too many falls through.
+        self.assertEqual(block_to_block_type("####### Heading"), BlockType.PARAGRAPH)
+
+    def test_heading_without_space_returns_paragraph(self):
+        self.assertEqual(block_to_block_type("#Heading"), BlockType.PARAGRAPH)
+
+    def test_heading_with_newline_returns_paragraph(self):
+        # Headings are single-line; any newline invalidates the block. A second
+        # heading-looking line is the author's or splitter's problem, not ours.
+        self.assertEqual(
+            block_to_block_type("# Introduction\n>A suitable place to start"),
+            BlockType.PARAGRAPH,
+        )
+
+    # --- Code ------------------------------------------------------------
+
+    def test_code_single_line_body_returns_code(self):
+        self.assertEqual(
+            block_to_block_type('```\nprint("Hello World!")```'),
+            BlockType.CODE,
+        )
+
+    def test_code_with_newline_before_closing_fence_returns_code(self):
+        self.assertEqual(
+            block_to_block_type('```\nprint("Hello World!")\n```'),
+            BlockType.CODE,
+        )
+
+    def test_code_multiline_indented_body_returns_code(self):
+        # The body is opaque to the classifier; interior newlines and
+        # indentation are just content and must not affect the verdict.
+        block = '```\ndef greet():\n    print("hi")\n    return True\n```'
+        self.assertEqual(block_to_block_type(block), BlockType.CODE)
+
+    def test_code_with_heading_like_line_in_body_returns_code(self):
+        # Guard: a # line inside the fences (e.g. a Python comment) must not be
+        # mistaken for a heading. Classification is by the fences, not the body.
+        block = '```\n# this is a comment, not a heading\nprint("hi")\n```'
+        self.assertEqual(block_to_block_type(block), BlockType.CODE)
+
+    def test_code_with_content_after_closing_fence_returns_paragraph(self):
+        self.assertEqual(
+            block_to_block_type('```\nprint("hi")\n```trailing'),
+            BlockType.PARAGRAPH,
+        )
+
+    def test_code_with_junk_before_opening_fence_returns_paragraph(self):
+        self.assertEqual(
+            block_to_block_type('x```\nprint("hi")\n```'),
+            BlockType.PARAGRAPH,
+        )
+
+    def test_code_with_language_tag_returns_paragraph(self):
+        # Strict rule: the opening fence must be immediately followed by a
+        # newline, so a language identifier invalidates the block.
+        self.assertEqual(
+            block_to_block_type('```python\nprint("Hello World!")\n```'),
+            BlockType.PARAGRAPH,
+        )
+
+    # --- Quote -----------------------------------------------------------
+
+    def test_quote_returns_quote(self):
+        block = (
+            ">We hold these truths to be self-evident,\n"
+            ">that all men are created equal,\n"
+            ">endowed by their creator"
+        )
+        self.assertEqual(block_to_block_type(block), BlockType.QUOTE)
+
+    def test_quote_with_space_after_every_marker_returns_quote(self):
+        # A space after > is allowed but not required.
+        block = (
+            "> We hold these truths to be self-evident,\n"
+            "> that all men are created equal,\n"
+            "> endowed by their creator"
+        )
+        self.assertEqual(block_to_block_type(block), BlockType.QUOTE)
+
+    def test_quote_with_mixed_spacing_returns_quote(self):
+        block = "> spaced line\n>unspaced line\n> spaced again"
+        self.assertEqual(block_to_block_type(block), BlockType.QUOTE)
+
+    def test_quote_single_line_returns_quote(self):
+        self.assertEqual(block_to_block_type("> a lonely quote"), BlockType.QUOTE)
+
+    def test_quote_with_non_marker_middle_line_returns_paragraph(self):
+        # The bad line sits in the middle to catch implementations that only
+        # check the first and last lines.
+        block = "> first\nbroken middle\n> last"
+        self.assertEqual(block_to_block_type(block), BlockType.PARAGRAPH)
+
+    # --- Unordered list --------------------------------------------------
+
+    def test_unordered_list_returns_unordered_list(self):
+        self.assertEqual(
+            block_to_block_type("- apples\n- bananas\n- oranges"),
+            BlockType.UNORDERED_LIST,
+        )
+
+    def test_unordered_list_single_line_returns_unordered_list(self):
+        self.assertEqual(
+            block_to_block_type("- only one item"),
+            BlockType.UNORDERED_LIST,
+        )
+
+    def test_unordered_list_with_marker_missing_space_returns_paragraph(self):
+        # Bad line in the middle: every line needs "- " (dash AND space).
+        self.assertEqual(
+            block_to_block_type("- apples\n-bananas\n- oranges"),
+            BlockType.PARAGRAPH,
+        )
+
+    def test_unordered_list_with_asterisk_marker_returns_paragraph(self):
+        # Only "-" is a valid bullet for this parser; "*" is not supported.
+        self.assertEqual(
+            block_to_block_type("* apples\n* bananas"),
+            BlockType.PARAGRAPH,
+        )
+
+    # --- Ordered list ----------------------------------------------------
+
+    def test_ordered_list_returns_ordered_list(self):
+        block = "1. Do 10 pushups\n2. Do 20 jumping jacks\n3. Do 5 squats"
+        self.assertEqual(block_to_block_type(block), BlockType.ORDERED_LIST)
+
+    def test_ordered_list_single_line_returns_ordered_list(self):
+        self.assertEqual(
+            block_to_block_type("1. the only step"),
+            BlockType.ORDERED_LIST,
+        )
+
+    def test_ordered_list_with_multi_digit_numbering_returns_ordered_list(self):
+        # Guards against checking only the first character of each line.
+        block = "\n".join(f"{n}. item {n}" for n in range(1, 12))
+        self.assertEqual(block_to_block_type(block), BlockType.ORDERED_LIST)
+
+    def test_ordered_list_with_number_missing_space_returns_paragraph(self):
+        block = "1. Do 10 pushups\n2. Do 20 jumping jacks\n3.Do 5 squats"
+        self.assertEqual(block_to_block_type(block), BlockType.PARAGRAPH)
+
+    def test_ordered_list_with_skipped_number_returns_paragraph(self):
+        # Numbering must increment by 1: 1, 2, 4 skips 3.
+        block = "1. Do 10 pushups\n2. Do 20 jumping jacks\n4. Do 5 squats"
+        self.assertEqual(block_to_block_type(block), BlockType.PARAGRAPH)
+
+    def test_ordered_list_not_starting_at_one_returns_paragraph(self):
+        # Numbering must start at 1.
+        self.assertEqual(
+            block_to_block_type("2. first\n3. second"),
+            BlockType.PARAGRAPH,
+        )
+
+    # --- Paragraph / fallthrough ----------------------------------------
+
+    def test_plain_text_returns_paragraph(self):
+        self.assertEqual(
+            block_to_block_type("Just some ordinary text."),
+            BlockType.PARAGRAPH,
+        )
+
+    def test_empty_string_returns_paragraph(self):
+        # Should never reach here (filtered upstream), but the classifier stays
+        # total rather than raising.
+        self.assertEqual(block_to_block_type(""), BlockType.PARAGRAPH)
+
+
+if __name__ == "__main__":
+    unittest.main()
