@@ -1,7 +1,7 @@
 import re
 
 from blocktype import BlockType
-from htmlnode import LeafNode
+from htmlnode import HTMLNode, LeafNode, ParentNode
 from textnode import TextNode, TextType
 
 
@@ -175,3 +175,77 @@ def block_to_block_type(block: str) -> BlockType:
         return BlockType.ORDERED_LIST
 
     return BlockType.PARAGRAPH
+
+
+def text_to_children(text: str) -> list[LeafNode]:
+    text_nodes = text_to_textnodes(text)
+    html_nodes = [text_node_to_html_node(text_node) for text_node in text_nodes]
+    return html_nodes
+
+
+def markdown_to_html_node(markdown: str) -> HTMLNode:
+    if markdown is None:
+        raise TypeError("markdown must be a string")
+
+    blocks = markdown_to_blocks(markdown)
+
+    if not blocks:
+        return ParentNode(tag="div", children=[LeafNode(tag=None, value="")])
+
+    block_nodes = []
+    for block in blocks:
+        block_type = block_to_block_type(block)
+
+        match block_type:
+            case BlockType.PARAGRAPH:
+                # we don't use whitespace to organize html
+                block = block.replace("\n", " ")
+                block_children = text_to_children(block)
+                block_node = ParentNode(tag="p", children=block_children)
+            case BlockType.HEADING:
+                match = re.match(r"^#{1,6} ", block)
+                if not match:
+                    raise ValueError(
+                        "something has gone wrong, because a blocktype of heading should definitely start with some number of #"
+                    )
+                heading_prefix = match.group()
+                heading_prefix_end = match.end()
+                heading_level = heading_prefix.count("#")
+                block = block[heading_prefix_end:]
+                block_children = text_to_children(block)
+                block_node = ParentNode(
+                    tag=f"h{heading_level}", children=block_children
+                )
+            case BlockType.CODE:
+                # worth noting this is dependent on the exact definition of a code block from block_to_block_type
+                # i.e. we're not allowing ```python at the start of a code block, so we can safely cut off the first 4 (```\n)
+                # but if that changes, this will break
+                block = block[4:-3]
+                block_child = LeafNode(tag="code", value=block)
+                block_node = ParentNode(tag="pre", children=[block_child])
+            case BlockType.QUOTE:
+                block = " ".join(
+                    line.lstrip(">").strip() for line in block.splitlines()
+                )
+                block_children = text_to_children(block)
+                block_node = ParentNode(tag="blockquote", children=block_children)
+            case BlockType.UNORDERED_LIST:
+                li_nodes = []
+                for li in block.splitlines():
+                    li = li[2:]
+                    li_children = text_to_children(li)
+                    li_node = ParentNode(tag="li", children=li_children)
+                    li_nodes.append(li_node)
+                block_node = ParentNode(tag="ul", children=li_nodes)
+            case BlockType.ORDERED_LIST:
+                li_nodes = []
+                for li in block.splitlines():
+                    li = li.split(". ", 1)[1]
+                    li_children = text_to_children(li)
+                    li_node = ParentNode(tag="li", children=li_children)
+                    li_nodes.append(li_node)
+                block_node = ParentNode(tag="ol", children=li_nodes)
+
+        block_nodes.append(block_node)
+
+    return ParentNode("div", children=block_nodes)

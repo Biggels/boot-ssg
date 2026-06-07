@@ -8,6 +8,7 @@ from transformations import (
     extract_markdown_images,
     extract_markdown_links,
     markdown_to_blocks,
+    markdown_to_html_node,
     split_nodes_delimiter,
     split_nodes_image,
     split_nodes_link,
@@ -1072,6 +1073,235 @@ class TestBlockToBlockType(unittest.TestCase):
         # Should never reach here (filtered upstream), but the classifier stays
         # total rather than raising.
         self.assertEqual(block_to_block_type(""), BlockType.PARAGRAPH)
+
+
+class TestMarkdownToHTMLNode(unittest.TestCase):
+    def test_paragraphs(self):
+        md = """
+This is **bolded** paragraph
+text in a p
+tag here
+
+This is another paragraph with _italic_ text and `code` here
+
+    """
+
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div><p>This is <b>bolded</b> paragraph text in a p tag here</p><p>This is another paragraph with <i>italic</i> text and <code>code</code> here</p></div>",
+        )
+
+    def test_codeblock(self):
+        md = """
+```
+This is text that _should_ remain
+the **same** even with inline stuff
+```
+    """
+
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div><pre><code>This is text that _should_ remain\nthe **same** even with inline stuff\n</code></pre></div>",
+        )
+
+    def test_empty_code_fence(self):
+        # A fence with no body still classifies as CODE; the code element is
+        # just empty. LeafNode tolerates an empty (but non-None) value.
+        md = "```\n```"
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(html, "<div><pre><code></code></pre></div>")
+
+    def test_heading(self):
+        md = "## Introduction"
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(html, "<div><h2>Introduction</h2></div>")
+
+    def test_heading_with_hash(self):
+        md = "## Introduction to the #"
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(html, "<div><h2>Introduction to the #</h2></div>")
+
+    def test_heading_with_inline_formatting(self):
+        # The heading path runs text_to_children, so inline markdown inside a
+        # heading must be parsed, not emitted literally.
+        md = "## The **Eiffel** _Tower_"
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(html, "<div><h2>The <b>Eiffel</b> <i>Tower</i></h2></div>")
+
+    def test_all_heading_levels(self):
+        # The renderer builds the tag with f"h{level}", so every level 1-6 must
+        # map to its own tag.
+        md = (
+            "# Level one\n\n"
+            "## Level two\n\n"
+            "### Level three\n\n"
+            "#### Level four\n\n"
+            "##### Level five\n\n"
+            "###### Level six"
+        )
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div>"
+            "<h1>Level one</h1>"
+            "<h2>Level two</h2>"
+            "<h3>Level three</h3>"
+            "<h4>Level four</h4>"
+            "<h5>Level five</h5>"
+            "<h6>Level six</h6>"
+            "</div>",
+        )
+
+    def test_seven_hashes_renders_as_paragraph(self):
+        # Just past the heading boundary: 7 hashes is not a heading, so it falls
+        # through to a literal paragraph rather than a (nonexistent) <h7>.
+        md = "####### Not a heading"
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(html, "<div><p>####### Not a heading</p></div>")
+
+    def test_quote_with_inline_formatting(self):
+        # Two assertions in one: the multi-line quote is joined with spaces AND
+        # inline markdown on those lines is parsed.
+        md = "> first line with **bold**\n> second line with _italic_"
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div><blockquote>first line with <b>bold</b> second line with <i>italic</i></blockquote></div>",
+        )
+
+    def test_list_items_with_inline_formatting(self):
+        # List items run text_to_children too; bold/italic/code inside an item
+        # must be parsed (test_all_blocks only covers link/image in a list).
+        md = "- a **bold** point\n- an _italic_ point\n- a `code` point"
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div><ul><li>a <b>bold</b> point</li><li>an <i>italic</i> point</li><li>a <code>code</code> point</li></ul></div>",
+        )
+
+    def test_quote(self):
+        md = """
+>We hold these truths to be self-evident,
+>that all men are created equal,
+>endowed by their creator
+        """
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div><blockquote>We hold these truths to be self-evident, that all men are created equal, endowed by their creator</blockquote></div>",
+        )
+
+    def test_unordered_list(self):
+        md = "- apples\n- bananas\n- oranges"
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html, "<div><ul><li>apples</li><li>bananas</li><li>oranges</li></ul></div>"
+        )
+
+    def test_ordered_list(self):
+        md = "1. Do 10 pushups\n2. Do 20 jumping jacks\n3. Do 5 squats"
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div><ol><li>Do 10 pushups</li><li>Do 20 jumping jacks</li><li>Do 5 squats</li></ol></div>",
+        )
+
+    def test_ordered_list_with_multi_digit_numbering(self):
+        # The marker is "<n>. " whose length grows once n hits 10, so a renderer
+        # that strips a fixed number of leading characters will leave a stray
+        # space on items 10+. Every <li> must contain only its text, no marker
+        # and no leading space.
+        md = "\n".join(f"{n}. item {n}" for n in range(1, 13))
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        expected_items = "".join(f"<li>item {n}</li>" for n in range(1, 13))
+        self.assertEqual(html, f"<div><ol>{expected_items}</ol></div>")
+
+    def test_empty_string_returns_empty_div(self):
+        # No content is a valid document: it should yield an empty wrapper div
+        # rather than crashing on a childless parent node.
+        node = markdown_to_html_node("")
+        self.assertEqual(node.to_html(), "<div></div>")
+
+    def test_whitespace_only_returns_empty_div(self):
+        # Whitespace-only input strips down to no blocks, so it behaves exactly
+        # like the empty string -- an empty wrapper div, not an error.
+        node = markdown_to_html_node("   \n\n  \t\n")
+        self.assertEqual(node.to_html(), "<div></div>")
+
+    def test_none_input_raises(self):
+        # markdown is typed as str; passing None violates the contract and must
+        # not be silently accepted.
+        with self.assertRaises(TypeError):
+            markdown_to_html_node(None)  # pyright: ignore[reportArgumentType]
+
+    def test_all_blocks(self):
+        md = """
+# The Eiffel Tower
+
+## Introduction
+
+In this article we will cover the _entire_ history of the **Eiffel Tower**, the greatest of landmarks.
+
+> Bonjour, c'est moi, le Tour Eiffel
+
+## Table of Contents
+
+1. From Bronze to Iron
+2. A Fateful Boast
+3. A Skeptical Crowd
+4. Reaching for the Sky
+5. From Jeers to Cheers
+
+# From Bronze to Iron
+
+To build a structure that scrapes the clouds, you must understand that you cannot use:
+
+- [wood](https://www.google.com/search?q=wood)
+- ![straw](imgur.com/i/some_straw)
+- or even bricks.
+
+Consider if you will the following function:
+
+```
+def will_it_stand(wind_force, tensile_strength, compression_strength):
+    return wind_force < tensile_strength * compression_strength
+```
+"""
+
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div>"
+            "<h1>The Eiffel Tower</h1>"
+            "<h2>Introduction</h2>"
+            "<p>In this article we will cover the <i>entire</i> history of the <b>Eiffel Tower</b>, the greatest of landmarks.</p>"
+            "<blockquote>Bonjour, c'est moi, le Tour Eiffel</blockquote>"
+            "<h2>Table of Contents</h2>"
+            "<ol><li>From Bronze to Iron</li><li>A Fateful Boast</li><li>A Skeptical Crowd</li><li>Reaching for the Sky</li><li>From Jeers to Cheers</li></ol>"
+            "<h1>From Bronze to Iron</h1>"
+            "<p>To build a structure that scrapes the clouds, you must understand that you cannot use:</p>"
+            '<ul><li><a href="https://www.google.com/search?q=wood">wood</a></li><li><img src="imgur.com/i/some_straw" alt="straw"></img></li><li>or even bricks.</li></ul>'
+            "<p>Consider if you will the following function:</p>"
+            "<pre><code>def will_it_stand(wind_force, tensile_strength, compression_strength):\n    return wind_force < tensile_strength * compression_strength\n</code></pre>"
+            "</div>",
+        )
 
 
 if __name__ == "__main__":
