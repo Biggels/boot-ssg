@@ -1,9 +1,8 @@
-from textnode import TextNode, TextType
+from file_manipulation import copy_directory
 
 
 def main():
-    test_node = TextNode("this is some bolded text", TextType.BOLD)
-    print(test_node)
+    copy_directory()
 
 
 if __name__ == "__main__":
