@@ -168,7 +168,6 @@ def block_to_block_type(block: str) -> BlockType:
         return BlockType.UNORDERED_LIST
 
     # ORDERED_LIST
-    # rewrite with enumerate and all()
     if all(
         line.startswith(f"{count}. ")
         for count, line in enumerate(block.splitlines(), start=1)
