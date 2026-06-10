@@ -1,13 +1,13 @@
 from file_manipulation import copy_directory
-from generation import generate_page
+from generation import generate_pages
 
 
 def main():
     copy_directory(source="static", destination="public")
-    generate_page(
-        from_path="content/index.md",
+    generate_pages(
+        content_dir_path="content",
         template_path="template.html",
-        dest_path="public/index.html",
+        dest_dir_path="public",
     )
 
 

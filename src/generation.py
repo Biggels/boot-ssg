@@ -42,3 +42,30 @@ def generate_page(from_path: str, template_path: str, dest_path: str) -> None:
 
     with open(dest_path, "w") as f:
         f.write(template)
+
+
+def generate_pages(content_dir_path, template_path, dest_dir_path):
+    content_dir_path = os.path.join(PROJECT_ROOT, content_dir_path)
+    if not content_dir_path:
+        raise ValueError("content directory does not exist in project root")
+    template_path = os.path.join(PROJECT_ROOT, template_path)
+    if not template_path:
+        raise ValueError("template file does not exist in project root")
+    dest_dir_path = os.path.join(PROJECT_ROOT, dest_dir_path)
+
+    for item in os.listdir(content_dir_path):
+        item_content_path = os.path.join(content_dir_path, item)
+        item_dest_path = os.path.join(dest_dir_path, item)
+        if os.path.isfile(item_content_path):
+            if item_content_path.endswith(".md"):
+                generate_page(
+                    from_path=item_content_path,
+                    template_path=template_path,
+                    dest_path=item_dest_path[:-2] + "html",
+                )
+        else:
+            generate_pages(
+                content_dir_path=item_content_path,
+                template_path=template_path,
+                dest_dir_path=item_dest_path,
+            )
