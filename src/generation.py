@@ -15,7 +15,9 @@ def extract_title(markdown: str) -> str:
     return match.group(1)
 
 
-def generate_page(from_path: str, template_path: str, dest_path: str) -> None:
+def generate_page(
+    from_path: str, template_path: str, dest_path: str, basepath: str
+) -> None:
 
     from_path = os.path.join(PROJECT_ROOT, from_path)
     if not os.path.exists(from_path):
@@ -39,12 +41,14 @@ def generate_page(from_path: str, template_path: str, dest_path: str) -> None:
 
     template = template.replace("{{ Title }}", title)
     template = template.replace("{{ Content }}", html)
+    template = template.replace('href="/', f'href="{basepath}')
+    template = template.replace('src="/', f'src="{basepath}')
 
     with open(dest_path, "w") as f:
         f.write(template)
 
 
-def generate_pages(content_dir_path, template_path, dest_dir_path):
+def generate_pages(content_dir_path, template_path, dest_dir_path, basepath):
     content_dir_path = os.path.join(PROJECT_ROOT, content_dir_path)
     if not content_dir_path:
         raise ValueError("content directory does not exist in project root")
@@ -62,10 +66,12 @@ def generate_pages(content_dir_path, template_path, dest_dir_path):
                     from_path=item_content_path,
                     template_path=template_path,
                     dest_path=item_dest_path[:-2] + "html",
+                    basepath=basepath,
                 )
         else:
             generate_pages(
                 content_dir_path=item_content_path,
                 template_path=template_path,
                 dest_dir_path=item_dest_path,
+                basepath=basepath,
             )
